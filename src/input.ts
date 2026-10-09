@@ -1,4 +1,4 @@
-import type { AttackId, PlayerInput } from './types';
+import { EMPTY_INPUT, type AttackId, type PlayerInput } from './types';
 
 const ATTACK_KEYS: Record<string, AttackId> = {
   KeyU: 'lp', KeyI: 'mp', KeyO: 'hp', KeyJ: 'lk', KeyK: 'mk', KeyL: 'hk',
@@ -29,6 +29,7 @@ export class ArcadeInput {
   private taps: { attack: AttackId; time: number }[] = [];
   private history: { direction: number; time: number }[] = [];
   private lastDirection = 5;
+  private enabled = true;
   facing: 1 | -1 = 1;
 
   constructor(private readonly onAction: (action: 'pause' | 'resume' | 'unlock') => void) {
@@ -43,7 +44,7 @@ export class ArcadeInput {
   }
 
   private keyDown = (event: KeyboardEvent) => {
-    if (this.isEditing(event)) return;
+    if (!this.enabled || this.isEditing(event)) return;
     if (ATTACK_KEYS[event.code] || DIRECTION_KEYS[event.code] || ['KeyP', 'Escape'].includes(event.code)) {
       event.preventDefault();
       this.onAction('unlock');
@@ -59,7 +60,7 @@ export class ArcadeInput {
 
   private keyUp = (event: KeyboardEvent) => {
     this.keys.delete(event.code);
-    this.recordDirection();
+    if (this.enabled) this.recordDirection();
   };
 
   private directionPressed(direction: 'left' | 'right' | 'up' | 'down') {
@@ -81,6 +82,7 @@ export class ArcadeInput {
   }
 
   press(attack: AttackId) {
+    if (!this.enabled) return;
     this.onAction('unlock');
     this.recordDirection();
     const motion = ['lp', 'mp', 'hp'].includes(attack) ? recognizeMotion(this.history, performance.now()) : null;
@@ -90,6 +92,7 @@ export class ArcadeInput {
   }
 
   setDirection(direction: 'left' | 'right' | 'up' | 'down', pressed: boolean) {
+    if (!this.enabled) return;
     this.onAction('unlock');
     if (pressed) this.touch.add(direction);
     else this.touch.delete(direction);
@@ -97,6 +100,7 @@ export class ArcadeInput {
   }
 
   sample(): PlayerInput {
+    if (!this.enabled) return { ...EMPTY_INPUT };
     this.recordDirection();
     this.taps = this.taps.filter((tap) => performance.now() - tap.time < 160);
     return {
@@ -109,6 +113,11 @@ export class ArcadeInput {
   clear = () => {
     this.keys.clear(); this.touch.clear(); this.taps = []; this.history = []; this.lastDirection = 5;
   };
+
+  setEnabled(enabled: boolean): void {
+    this.enabled = enabled;
+    this.clear();
+  }
 
   destroy() {
     document.removeEventListener('keydown', this.keyDown);

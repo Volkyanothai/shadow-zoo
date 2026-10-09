@@ -10,6 +10,10 @@ export interface GameController {
   start(fighterId: FighterId): void;
   pause(): void;
   restart(): void;
+  returnToMenu(): void;
+  setInputEnabled(enabled: boolean): void;
+  resize(): void;
+  unlockAudio(): void;
   setMuted(muted: boolean): void;
   press(attack: AttackId): void;
   setDirection(direction: 'left' | 'right' | 'up' | 'down', pressed: boolean): void;
@@ -80,7 +84,7 @@ function drawHud(ctx: CanvasRenderingContext2D, state: GameState, trails: number
 }
 
 export function createGame(parent: HTMLElement, onUpdate: (snapshot: GameSnapshot) => void): GameController {
-  const engine = new CombatEngine('leo', true);
+  let engine = new CombatEngine('leo', true);
   const sound = new ArcadeAudio();
   let paused = false;
   let muted = false;
@@ -94,14 +98,18 @@ export function createGame(parent: HTMLElement, onUpdate: (snapshot: GameSnapsho
   let lastNotification = 0;
   let sceneReady = false;
   let dead = false;
+  let inputEnabled = false;
+  let menuActive = true;
+
+  const syncSound = () => sound.setMuted(muted || paused || menuActive || !inputEnabled);
 
   const notify = () => { if (!dead) onUpdate({ state: engine.state, paused, muted }); };
   const pause = () => {
     if (!['fight', 'countdown', 'roundOver'].includes(engine.state.phase)) return;
     paused = !paused;
     accumulator = 0;
-    input.clear();
-    sound.setMuted(muted || paused);
+    input.setEnabled(inputEnabled && !paused);
+    syncSound();
     notify();
   };
   const input = new ArcadeInput((action) => {
@@ -109,6 +117,8 @@ export function createGame(parent: HTMLElement, onUpdate: (snapshot: GameSnapsho
     if (action === 'pause') pause();
     if (action === 'resume' && paused) pause();
   });
+  input.setEnabled(false);
+  syncSound();
   const background = new Image();
   background.onload = () => setArenaImage(background);
   background.src = `${import.meta.env.BASE_URL}assets/arena.png`;
@@ -128,11 +138,12 @@ export function createGame(parent: HTMLElement, onUpdate: (snapshot: GameSnapsho
       canvas.tabIndex = 0;
       canvas.addEventListener('pointerdown', () => { sound.unlock(); canvas.focus({ preventScroll: true }); });
       sceneReady = true;
+      controller.resize();
       notify();
     }
     update(time: number, delta: number) {
       if (!sceneReady || dead) return;
-      if (!paused) {
+      if (!paused && inputEnabled && !menuActive) {
         accumulator += Math.min(delta, 100);
         while (accumulator >= 1000 / 60) {
           const previousPhase = engine.state.phase;
@@ -183,11 +194,6 @@ export function createGame(parent: HTMLElement, onUpdate: (snapshot: GameSnapsho
         pixelText(ctx, state.winner === null ? 'DRAW' : `${NAMES[state.fighters[state.winner].id]} WINS`, WIDTH / 2, 109, 9, '#fff5df', 'center');
       }
       if (meterHint > 0 && !paused) pixelText(ctx, 'SUPER NEEDS FULL METER', WIDTH / 2, 183, 6, '#ffe69e', 'center');
-      if (paused) {
-        ctx.fillStyle = 'rgba(9,16,24,.72)'; ctx.fillRect(0, 0, WIDTH, HEIGHT);
-        pixelText(ctx, 'PAUSED', WIDTH / 2, 86, 20, '#ffdf93', 'center');
-        pixelText(ctx, 'PRESS P TO RESUME', WIDTH / 2, 116, 7, '#fff1d1', 'center');
-      }
       this.screen.refresh();
       if (time - lastNotification > 120) { lastNotification = time; notify(); }
     }
@@ -204,7 +210,7 @@ export function createGame(parent: HTMLElement, onUpdate: (snapshot: GameSnapsho
     antialias: false,
     audio: { noAudio: true },
     input: { keyboard: false },
-    scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+    scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.NO_CENTER },
     scene: ArenaScene,
     banner: false,
     fps: { target: 60, forceSetTimeOut: false },
@@ -217,12 +223,30 @@ export function createGame(parent: HTMLElement, onUpdate: (snapshot: GameSnapsho
 
   const controller: GameController = {
     start(fighterId) {
-      sound.unlock(); selected = fighterId; paused = false; input.clear(); accumulator = 0;
-      sound.setMuted(muted); engine.start(fighterId); hudTrails = [1000, 1000]; flash = 0; shake = 0; fightText = 0; notify();
+      sound.unlock(); selected = fighterId; paused = false; menuActive = false; inputEnabled = true;
+      input.setEnabled(true); accumulator = 0;
+      syncSound(); engine.start(fighterId); hudTrails = [1000, 1000]; flash = 0; shake = 0; fightText = 0; meterHint = 0; notify();
     },
     pause,
     restart() { controller.start(selected); },
-    setMuted(value) { muted = value; sound.setMuted(muted || paused); if (!muted) sound.unlock(); notify(); },
+    returnToMenu() {
+      menuActive = true; inputEnabled = false; paused = false; accumulator = 0;
+      input.setEnabled(false); engine = new CombatEngine(selected, true);
+      hudTrails = [1000, 1000]; flash = 0; shake = 0; fightText = 0; meterHint = 0;
+      syncSound(); notify();
+    },
+    setInputEnabled(enabled) {
+      if (inputEnabled === enabled) return;
+      inputEnabled = enabled; accumulator = 0;
+      input.setEnabled(enabled && !paused && !menuActive); syncSound();
+    },
+    resize() {
+      requestAnimationFrame(() => {
+        if (!dead && parent.clientWidth > 0 && parent.clientHeight > 0) phaser.scale.refresh();
+      });
+    },
+    unlockAudio() { sound.unlock(); },
+    setMuted(value) { muted = value; syncSound(); if (!muted) sound.unlock(); notify(); },
     press(attack) { input.press(attack); },
     setDirection(direction, pressed) { input.setDirection(direction, pressed); },
     getState() { return engine.state; },
