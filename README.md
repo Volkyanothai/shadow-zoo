@@ -6,6 +6,8 @@
 
 เวอร์ชันนี้เปลี่ยน Kai เป็นภาพเสือรายละเอียดสูงที่ประกอบจากภาพโปร่งใส 16 ชิ้น พร้อมท่ายืน เดิน คอมโบสามจังหวะ เตะ ป้องกัน และรับความเสียหาย แตะ **PREVIEW KAI** ในหน้าแรกเพื่อดูตัวละครขยายและสลับท่าได้ หมาป่ายังใช้ภาพต้นแบบเดิม ดู [ภาพและคลิปที่บันทึกจากเกมจริง](docs/visual-study.md) หรือ [ไฟล์ติดตั้ง](downloads/README.md)
 
+ข้อจำกัดของภาพแยกชิ้นและแผนเปลี่ยนเป็นโมเดล 3D อยู่ใน [งานศึกษาโมเดลและการเคลื่อนไหว](docs/motion-and-model-research.md) พร้อมแหล่งข้อมูลและเกณฑ์ตรวจคุณภาพท่า
+
 ## Try the Android build
 
 The test APK is built at `build/shadow-zoo.apk`. Copy it to the tablet, open it, and allow installation from the app opening the file when Android requests it. Launch **Shadow Zoo**, turn the tablet to landscape, and tap **ENTER THE ARENA**.
