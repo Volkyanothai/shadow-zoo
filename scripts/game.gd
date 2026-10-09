@@ -35,6 +35,10 @@ var health_display := Vector2(100, 100)
 var rng := RandomNumberGenerator.new()
 var study_pose := "idle"
 var study_time := 0.0
+var model_study: Node3D
+
+const PAINTED_PREVIEW_BUTTON := Rect2(294, 615, 320, 46)
+const MODEL_PREVIEW_BUTTON := Rect2(636, 615, 350, 46)
 
 const STUDY_BUTTONS := {
 	"idle": Rect2(276, 617, 166, 54),
@@ -44,6 +48,9 @@ const STUDY_BUTTONS := {
 }
 
 func _ready() -> void:
+	# Handle Android Back here; its default SceneTree behavior would quit even
+	# after the character studio restores the menu.
+	get_tree().quit_on_go_back = false
 	rng.randomize()
 	world = Node2D.new()
 	add_child(world)
@@ -89,6 +96,8 @@ func _ready() -> void:
 	set_meta("hud_node", hud)
 
 func start_match(skip_intro := false) -> void:
+	if is_instance_valid(model_study):
+		leave_model_study()
 	player.scale = Vector2.ONE
 	bot.visible = true
 	player_wins = 0
@@ -97,6 +106,8 @@ func start_match(skip_intro := false) -> void:
 	begin_round(skip_intro)
 
 func enter_study() -> void:
+	if is_instance_valid(model_study):
+		leave_model_study()
 	mode = "study"
 	mode_time = 0.0
 	study_time = 0.0
@@ -120,6 +131,45 @@ func leave_study() -> void:
 	bot.visible = true
 	player.facing = 1
 	bot.facing = -1
+
+func enter_model_study() -> void:
+	if is_instance_valid(model_study):
+		return
+	var scene := load("res://scenes/model_study.tscn") as PackedScene
+	if scene == null:
+		return
+	mode = "model_study"
+	player.active = false
+	bot.active = false
+	pad.enabled = false
+	pad.clear()
+	pad.hide()
+	world.hide()
+	world.process_mode = Node.PROCESS_MODE_DISABLED
+	get_meta("hud_node").hide()
+	if is_instance_valid(audio.music):
+		audio.music.stream_paused = true
+	for voice: AudioStreamPlayer in audio.voices:
+		voice.stop()
+	model_study = scene.instantiate()
+	model_study.exited.connect(leave_model_study)
+	add_child(model_study)
+
+func leave_model_study() -> void:
+	if is_instance_valid(model_study):
+		model_study.queue_free()
+	model_study = null
+	world.process_mode = Node.PROCESS_MODE_INHERIT
+	world.show()
+	world.position = Vector2.ZERO
+	pad.show()
+	pad.enabled = false
+	pad.clear()
+	leave_study()
+	get_meta("hud_node").show()
+	get_meta("hud_node").queue_redraw()
+	if is_instance_valid(audio.music):
+		audio.music.stream_paused = false
 
 func _update_study(delta: float) -> void:
 	study_time += delta
@@ -169,6 +219,8 @@ func begin_round(skip_intro := false) -> void:
 	audio.play("bell")
 
 func _physics_process(delta: float) -> void:
+	if mode == "model_study":
+		return
 	clock += delta
 	mode_time += delta
 	banner_time = maxf(0.0, banner_time - delta)
@@ -322,12 +374,20 @@ func _notification(what: int) -> void:
 		if mode in ["fight", "intro"]:
 			toggle_pause()
 	elif what == NOTIFICATION_WM_GO_BACK_REQUEST:
-		if mode == "study":
+		if mode == "model_study":
+			leave_model_study()
+		elif mode == "study":
 			leave_study()
 		elif mode in ["fight", "intro", "pause"]:
 			toggle_pause()
+		elif mode in ["menu", "roundover", "matchover"]:
+			get_tree().quit()
 
 func _input(event: InputEvent) -> void:
+	if mode == "model_study":
+		if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode == KEY_ESCAPE:
+			leave_model_study()
+		return
 	if event is InputEventKey and event.pressed and not event.echo:
 		match event.physical_keycode:
 			KEY_ENTER:
@@ -360,7 +420,10 @@ func _input(event: InputEvent) -> void:
 				study_pose = pose
 				study_time = 0.0
 		return
-	if mode == "menu" and Rect2(460, 615, 360, 46).has_point(point):
+	if mode == "menu" and MODEL_PREVIEW_BUTTON.has_point(point):
+		enter_model_study()
+		return
+	if mode == "menu" and PAINTED_PREVIEW_BUTTON.has_point(point):
 		enter_study()
 		return
 	if Rect2(1185, 22, 68, 40).has_point(point) and mode in ["fight", "intro", "pause"]:
@@ -384,6 +447,8 @@ func _continue() -> void:
 			toggle_pause()
 		"study":
 			leave_study()
+		"model_study":
+			leave_model_study()
 		"roundover":
 			round_number += 1
 			begin_round()
@@ -417,6 +482,8 @@ func _health_bar(hud: Node2D, x: float, health: float, trailing: float, stamina:
 	hud.draw_rect(Rect2(x + 6 + (418 - stamina_width if reverse else 0.0), 119, stamina_width, 4), Color("93bdc0"))
 
 func _draw_hud(hud: Node2D) -> void:
+	if mode == "model_study":
+		return
 	if mode == "study":
 		_draw_study_hud(hud)
 		return
@@ -486,9 +553,11 @@ func _draw_hud(hud: Node2D) -> void:
 			_label(hud, "TOUCH CONTROLS  /  A D MOVE · J STRIKE · K HEAVY", Vector2(640, 555), 15, MUTED, true)
 			_label(hud, "L GUARD · SPACE JUMP · SHIFT DODGE · ESC PAUSE", Vector2(640, 576), 15, MUTED, true)
 	if mode == "menu":
-		_panel(hud, Rect2(460, 615, 360, 46), Color(0.025, 0.07, 0.09, 0.93), Color("647f72"))
-		_label(hud, "PREVIEW KAI", Vector2(640, 646), 22, GOLD, true)
-	_label(hud, "VISUAL STUDY  /  0.2", Vector2(640, 704), 12, Color(0.63, 0.73, 0.73, 0.6), true)
+		_panel(hud, PAINTED_PREVIEW_BUTTON, Color(0.025, 0.07, 0.09, 0.93), Color("647f72"))
+		_label(hud, "PREVIEW KAI", PAINTED_PREVIEW_BUTTON.get_center() + Vector2(0, 8), 22, GOLD, true)
+		_panel(hud, MODEL_PREVIEW_BUTTON, Color("cba569"), GOLD)
+		_label(hud, "3D MOTION STUDY", MODEL_PREVIEW_BUTTON.get_center() + Vector2(0, 8), 22, Color("10232c"), true)
+	_label(hud, "MODEL STUDY  /  0.3", Vector2(640, 704), 12, Color(0.63, 0.73, 0.73, 0.6), true)
 
 func _draw_study_hud(hud: Node2D) -> void:
 	for i in range(10):

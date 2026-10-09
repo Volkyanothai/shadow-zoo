@@ -4,3 +4,4 @@ build/
 *.keystore
 *.zip
 *.log
+__pycache__/

@@ -1,12 +1,14 @@
 # Shadow Zoo — The First Duel
 
-เกมต่อสู้สัตว์ 2D แบบแอป Godot เวอร์ชันต้นแบบ 0.2 สำหรับเล่นแนวนอนบนแท็บเล็ต
+เกมต่อสู้สัตว์แบบแอป Godot เวอร์ชันต้นแบบ 0.3 สำหรับเล่นแนวนอนบนแท็บเล็ต
 
 เล่นเป็น Kai (เสือ) ต่อสู้กับ Fen (หมาป่า AI) ในสนาม Moonlit Shrine มีโจมตีเบา คอมโบสามจังหวะ เตะหนัก ป้องกัน กระโดด และหลบ ใช้พลังในการออกท่า แข่งชนะสองยกจากสามยก ยกละ 60 วินาที เล่นออฟไลน์ได้
 
-เวอร์ชันนี้เปลี่ยน Kai เป็นภาพเสือรายละเอียดสูงที่ประกอบจากภาพโปร่งใส 16 ชิ้น พร้อมท่ายืน เดิน คอมโบสามจังหวะ เตะ ป้องกัน และรับความเสียหาย แตะ **PREVIEW KAI** ในหน้าแรกเพื่อดูตัวละครขยายและสลับท่าได้ หมาป่ายังใช้ภาพต้นแบบเดิม ดู [ภาพและคลิปที่บันทึกจากเกมจริง](docs/visual-study.md) หรือ [ไฟล์ติดตั้ง](downloads/README.md)
+ในสนามต่อสู้ Kai ใช้ภาพเสือรายละเอียดสูงที่ประกอบจากภาพโปร่งใส 16 ชิ้น พร้อมท่ายืน เดิน คอมโบสามจังหวะ เตะ ป้องกัน และรับความเสียหาย แตะ **PREVIEW KAI** ในหน้าแรกเพื่อดูตัวละครขยายและสลับท่าได้ หมาป่ายังใช้ภาพต้นแบบเดิม ดู [ภาพและคลิปที่บันทึกจากเกมจริง](docs/visual-study.md) หรือ [ไฟล์ติดตั้ง](downloads/README.md)
 
 ข้อจำกัดของภาพแยกชิ้นและแผนเปลี่ยนเป็นโมเดล 3D อยู่ใน [งานศึกษาโมเดลและการเคลื่อนไหว](docs/motion-and-model-research.md) พร้อมแหล่งข้อมูลและเกณฑ์ตรวจคุณภาพท่า
+
+เวอร์ชัน 0.3 เพิ่มหน้า **3D MOTION STUDY** สำหรับเสือโมเดลสามมิติสีเทา มีผิวต่อเนื่องพร้อมกระดูกและแอนิเมชันท่ายืน ก้าวหน้า ก้าวถอย และหมัดหนึ่งท่า หมุนกล้อง ดูช้า หยุดหรือเล่นซ้ำได้ ดู [ภาพ คลิป และต้นฉบับโมเดล](docs/model-study.md) สนามต่อสู้ยังใช้เสือภาพวาดของ 0.2 ระหว่างตรวจคุณภาพโมเดลใหม่
 
 ## Try the Android build
 
@@ -46,13 +48,18 @@ Movement and guard support simultaneous touches. Guard reduces frontal damage an
 ```sh
 godot --headless --path . --script tests/smoke.gd
 godot --headless --path . --script tests/visual_smoke.gd
+godot --headless --path . --script tests/model_smoke.gd
 ```
 
 The suite runs **25 behavioral checks**, covering scene startup, movement, pause, damage timing, combo damage, guarding, guard break, stamina, dodge invulnerability, range, airborne evasion, landing, multitouch, round/match transitions, rematches, timeouts, and AI damage. It exits nonzero on a failure.
 
-The visual suite runs **56 checks** covering the actual transparent atlas, all 16 regions, metadata loading, articulated anatomy, changing walk poses, distinct combo poses, other combat poses, preview entry/exit and Android Back restoration. Both suites exit nonzero on failure.
+The visual suite runs **56 checks** covering the actual transparent atlas, all 16 regions, metadata loading, articulated anatomy, changing walk poses, distinct combo poses, other combat poses, preview entry/exit and Android Back restoration. Every suite exits nonzero on failure.
+
+The model suite runs **50 checks** covering the real imported 3D mesh, skin weight normalization/blending, anatomical bones, four clips, frame-zero keys, planted foot phases, fighting shuffle order, camera/touch controls, sound preservation, exit restoration and native Android Back event routing. The suites check mechanics and deformation data; visual review is still necessary to judge natural movement.
 
 Native rendered frames can be captured using `tests/visual_capture.gd` on a graphical display; it saves gameplay and pose PNGs to `/workspace/artifacts`. Add `-- --demo` with Godot's `--write-movie` and `--fixed-fps 60` options to record a deterministic animation demonstration. Its recording rate is not a device performance measurement.
+
+Use `tests/model_capture.gd` for native 3D studio frames and its `-- --demo` mode for the model motion recording. `tools/build_tiger_model.py`, run through Blender 4.3.2, reconstructs the original GLB and an editable Blender file from the geometry and rig modules.
 
 ## Export Android
 
@@ -77,11 +84,12 @@ The current cloud build used SHA-512-verified official Godot 4.6.3 templates and
 - `scripts/game.gd`: match flow, AI, controls, hit resolution, HUD and menus.
 - `scripts/fighter.gd`: fighter state machine, stamina, attacks and the wolf's procedural character art.
 - `scripts/tiger_visual.gd`: painted tiger rig, limb articulation and combat animation driven by fighter state.
+- `scripts/model_study.gd`, `scenes/model_study.tscn`: isolated native 3D studio, lighting, animation inspection and camera controls.
 - `scripts/touch_pad.gd`: independent multitouch controls and movement dragging.
 - `scripts/arena.gd`, `scripts/effects.gd`: painted arena, fireflies, impact particles and effects.
 - `scripts/audio.gd`: bounded sound playback and mute preferences.
 - `assets/`: generated arena and tiger artwork, original synthesized sound and the Rajdhani font.
 
-The original tiger atlas is preserved as a single transparent painting. `assets/fighters/tiger/tiger-atlas.regions.json` stores precomputed alpha bounds so mobile startup does not scan every atlas pixel. The export includes that JSON and excludes tests, tools, docs and delivery files. Optional per-piece/per-pose paintings can be added through the rig's texture override API.
+The original tiger atlas is preserved as a single transparent painting. `assets/fighters/tiger/tiger-atlas.regions.json` stores precomputed alpha bounds so mobile startup does not scan every atlas pixel. The 3D study uses `assets/fighters/tiger3d/tiger-study.glb` plus motion metadata. The export includes both JSON metadata files and the font's OFL license, and excludes tests, tools, docs and delivery files. Optional per-piece/per-pose paintings can be added through the painted rig's texture override API.
 
-Rajdhani is redistributed under the SIL Open Font License, included in `assets/fonts/OFL.txt`. Arena and tiger art were generated for this project. The rig, wolf drawing and sound synthesis were created for this prototype. No assets from Shadow Fight are included.
+Rajdhani is redistributed under the SIL Open Font License, included in `assets/fonts/OFL.txt`. Arena and tiger paintings were generated for this project. The original 3D model, baked motion, rigs, wolf drawing and sound synthesis were created for this prototype. No assets from Shadow Fight are included.

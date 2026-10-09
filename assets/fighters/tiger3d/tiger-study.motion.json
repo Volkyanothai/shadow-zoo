@@ -1,0 +1,143 @@
+{
+  "schema_version": 1,
+  "coordinate_system": "Blender metres: X across, -Y forward, Z up; glTF converts to Y up",
+  "fps": 60,
+  "root_bone": "root",
+  "foot_bones": [
+    "foot.L",
+    "foot.R"
+  ],
+  "ankle_rest_height": 0.14,
+  "continuous_skinned_mesh": "Kai_Body",
+  "weights": {
+    "vertices": 13002,
+    "weight_sum_min": 0.9999999999999999,
+    "weight_sum_max": 1.0000000000000002,
+    "max_influences": 4
+  },
+  "bone_count": 26,
+  "clips": {
+    "idle_guard": {
+      "duration": 2.0,
+      "foot_contacts": {
+        "foot.L": [
+          [
+            0,
+            2.0
+          ]
+        ],
+        "foot.R": [
+          [
+            0,
+            2.0
+          ]
+        ]
+      },
+      "root_translation_blender": [
+        0,
+        0,
+        0
+      ],
+      "loop": true
+    },
+    "step_forward": {
+      "duration": 1.2,
+      "foot_contacts": {
+        "foot.L": [
+          [
+            0,
+            0.072
+          ],
+          [
+            0.552,
+            1.2
+          ]
+        ],
+        "foot.R": [
+          [
+            0,
+            0.648
+          ],
+          [
+            1.128,
+            1.2
+          ]
+        ]
+      },
+      "root_translation_blender": [
+        0,
+        -0.5,
+        0
+      ],
+      "loop": false
+    },
+    "step_back": {
+      "duration": 1.2,
+      "foot_contacts": {
+        "foot.L": [
+          [
+            0,
+            0.648
+          ],
+          [
+            1.128,
+            1.2
+          ]
+        ],
+        "foot.R": [
+          [
+            0,
+            0.072
+          ],
+          [
+            0.552,
+            1.2
+          ]
+        ]
+      },
+      "root_translation_blender": [
+        0,
+        0.5,
+        0
+      ],
+      "loop": false
+    },
+    "jab": {
+      "duration": 0.65,
+      "foot_contacts": {
+        "foot.L": [
+          [
+            0,
+            0.65
+          ]
+        ],
+        "foot.R": [
+          [
+            0,
+            0.65
+          ]
+        ]
+      },
+      "root_translation_blender": [
+        0,
+        0,
+        0
+      ],
+      "loop": false,
+      "strike_contact": 0.23
+    }
+  },
+  "export": {
+    "export_animation_mode": "NLA_TRACKS",
+    "export_force_sampling": true,
+    "export_frame_range": false
+  },
+  "authoring_tool": "Blender 4.3.2",
+  "source": "Original procedural model and authored baked motion for Shadow Zoo",
+  "stage": "grey_model_motion_study",
+  "body_vertices": 13002,
+  "body_triangles": 26000,
+  "deform_bones": 25,
+  "source_glb_sha256": "47c7da997ad74c54e6c4a8b60e8d22ac957a81c32fcbc50c8d8656c1182c6393",
+  "coordinate_note": "Blender Z up, negative Y forward; glTF/Godot Y up, positive Z forward"
+}
