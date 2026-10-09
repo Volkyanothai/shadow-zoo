@@ -33,6 +33,15 @@ var banner := ""
 var banner_time := 0.0
 var health_display := Vector2(100, 100)
 var rng := RandomNumberGenerator.new()
+var study_pose := "idle"
+var study_time := 0.0
+
+const STUDY_BUTTONS := {
+	"idle": Rect2(276, 617, 166, 54),
+	"walk": Rect2(460, 617, 166, 54),
+	"combo": Rect2(644, 617, 166, 54),
+	"guard": Rect2(828, 617, 166, 54)
+}
 
 func _ready() -> void:
 	rng.randomize()
@@ -80,10 +89,64 @@ func _ready() -> void:
 	set_meta("hud_node", hud)
 
 func start_match(skip_intro := false) -> void:
+	player.scale = Vector2.ONE
+	bot.visible = true
 	player_wins = 0
 	bot_wins = 0
 	round_number = 1
 	begin_round(skip_intro)
+
+func enter_study() -> void:
+	mode = "study"
+	mode_time = 0.0
+	study_time = 0.0
+	study_pose = "idle"
+	player.reset_at(Vector2(640, ZooFighter.FLOOR_Y))
+	player.facing = 1.0
+	player.scale = Vector2(1.45, 1.45)
+	player.active = false
+	bot.active = false
+	bot.visible = false
+	pad.enabled = false
+	pad.clear()
+	effects.clear()
+	world.position = Vector2.ZERO
+
+func leave_study() -> void:
+	mode = "menu"
+	player.scale = Vector2.ONE
+	player.reset_at(Vector2(405, ZooFighter.FLOOR_Y))
+	bot.reset_at(Vector2(875, ZooFighter.FLOOR_Y))
+	bot.visible = true
+	player.facing = 1
+	bot.facing = -1
+
+func _update_study(delta: float) -> void:
+	study_time += delta
+	player.guard = false
+	player.move_axis = 0.0
+	match study_pose:
+		"walk":
+			player.state = "run"
+			player.move_axis = 1.0
+			player.state_time = study_time
+		"combo":
+			var cycle := fposmod(study_time, 1.65)
+			if cycle < 1.05:
+				player.state = "attack"
+				player.attack_kind = "light"
+				player.combo = mini(3, int(cycle / 0.35) + 1)
+				player.state_time = fposmod(cycle, 0.35)
+			else:
+				player.state = "idle"
+				player.state_time = cycle - 1.05
+		"guard":
+			player.state = "guard"
+			player.guard = true
+			player.state_time = study_time
+		_:
+			player.state = "idle"
+			player.state_time = study_time
 
 func begin_round(skip_intro := false) -> void:
 	player.reset_at(Vector2(430, ZooFighter.FLOOR_Y))
@@ -116,7 +179,9 @@ func _physics_process(delta: float) -> void:
 	player.active = false
 	bot.active = false
 	pad.enabled = mode == "fight"
-	if mode == "intro":
+	if mode == "study":
+		_update_study(delta)
+	elif mode == "intro":
 		if mode_time >= 1.6:
 			mode = "fight"
 			mode_time = 0
@@ -257,7 +322,9 @@ func _notification(what: int) -> void:
 		if mode in ["fight", "intro"]:
 			toggle_pause()
 	elif what == NOTIFICATION_WM_GO_BACK_REQUEST:
-		if mode in ["fight", "intro", "pause"]:
+		if mode == "study":
+			leave_study()
+		elif mode in ["fight", "intro", "pause"]:
 			toggle_pause()
 
 func _input(event: InputEvent) -> void:
@@ -266,7 +333,10 @@ func _input(event: InputEvent) -> void:
 			KEY_ENTER:
 				_continue()
 			KEY_ESCAPE:
-				toggle_pause()
+				if mode == "study":
+					leave_study()
+				else:
+					toggle_pause()
 			KEY_R:
 				start_match()
 			KEY_J:
@@ -282,6 +352,17 @@ func _input(event: InputEvent) -> void:
 		point = event.position
 	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		point = event.position
+	if mode == "study":
+		if Rect2(1165, 22, 90, 42).has_point(point):
+			leave_study()
+		for pose: String in STUDY_BUTTONS:
+			if STUDY_BUTTONS[pose].has_point(point):
+				study_pose = pose
+				study_time = 0.0
+		return
+	if mode == "menu" and Rect2(460, 615, 360, 46).has_point(point):
+		enter_study()
+		return
 	if Rect2(1185, 22, 68, 40).has_point(point) and mode in ["fight", "intro", "pause"]:
 		toggle_pause()
 	elif Rect2(1080, 22, 96, 40).has_point(point):
@@ -301,6 +382,8 @@ func _continue() -> void:
 			start_match()
 		"pause":
 			toggle_pause()
+		"study":
+			leave_study()
 		"roundover":
 			round_number += 1
 			begin_round()
@@ -334,6 +417,9 @@ func _health_bar(hud: Node2D, x: float, health: float, trailing: float, stamina:
 	hud.draw_rect(Rect2(x + 6 + (418 - stamina_width if reverse else 0.0), 119, stamina_width, 4), Color("93bdc0"))
 
 func _draw_hud(hud: Node2D) -> void:
+	if mode == "study":
+		_draw_study_hud(hud)
+		return
 	# Readable top scrim and a quiet bottom scrim over the painted scene.
 	for i in range(12):
 		hud.draw_rect(Rect2(0, i * 12, 1280, 12), Color(0.025, 0.05, 0.075, 0.79 * (1.0 - float(i) / 12)))
@@ -399,4 +485,24 @@ func _draw_hud(hud: Node2D) -> void:
 		else:
 			_label(hud, "TOUCH CONTROLS  /  A D MOVE · J STRIKE · K HEAVY", Vector2(640, 555), 15, MUTED, true)
 			_label(hud, "L GUARD · SPACE JUMP · SHIFT DODGE · ESC PAUSE", Vector2(640, 576), 15, MUTED, true)
-	_label(hud, "FIRST PLAYABLE  /  0.1", Vector2(640, 704), 12, Color(0.63, 0.73, 0.73, 0.6), true)
+	if mode == "menu":
+		_panel(hud, Rect2(460, 615, 360, 46), Color(0.025, 0.07, 0.09, 0.93), Color("647f72"))
+		_label(hud, "PREVIEW KAI", Vector2(640, 646), 22, GOLD, true)
+	_label(hud, "VISUAL STUDY  /  0.2", Vector2(640, 704), 12, Color(0.63, 0.73, 0.73, 0.6), true)
+
+func _draw_study_hud(hud: Node2D) -> void:
+	for i in range(10):
+		hud.draw_rect(Rect2(0, i * 12, 1280, 12), Color(0.025, 0.05, 0.075, 0.8 * (1.0 - float(i) / 10)))
+	_label(hud, "SHADOW ZOO", Vector2(640, 35), 20, GOLD, true)
+	_label(hud, "KAI  /  TIGER", Vector2(640, 79), 34, IVORY, true)
+	_label(hud, "CHARACTER PREVIEW", Vector2(640, 104), 15, MUTED, true)
+	_panel(hud, Rect2(1165, 22, 90, 42), Color("102832"), Color("647f72"))
+	_label(hud, "BACK", Vector2(1210, 51), 19, IVORY, true)
+	var labels := {"idle": "STANCE", "walk": "WALK", "combo": "COMBO", "guard": "GUARD"}
+	for pose: String in STUDY_BUTTONS:
+		var rect: Rect2 = STUDY_BUTTONS[pose]
+		var selected := study_pose == pose
+		_panel(hud, rect, Color("cba569") if selected else Color("102832"), GOLD if selected else Color("647f72"))
+		_label(hud, labels[pose], rect.get_center() + Vector2(0, 8), 23, Color("10232c") if selected else IVORY, true)
+	_label(hud, "Tap a pose to preview", Vector2(640, 595), 17, MUTED, true)
+	_label(hud, "VISUAL STUDY  /  0.2", Vector2(640, 704), 12, MUTED, true)

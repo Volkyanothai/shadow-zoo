@@ -30,6 +30,20 @@ var combo_window := 0.0
 var animation_time := 0.0
 var damage_flash := 0.0
 var dash_direction := 1.0
+var visual: Node2D
+
+func _ready() -> void:
+	if species == "tiger" and ResourceLoader.exists("res://assets/fighters/tiger/tiger-atlas.png"):
+		var rig_script: Script = load("res://scripts/tiger_visual.gd")
+		if rig_script:
+			visual = Node2D.new()
+			visual.name = "PaintedTiger"
+			visual.set_script(rig_script)
+			add_child(visual)
+			visual.setup(self)
+
+func uses_detailed_art() -> bool:
+	return is_instance_valid(visual) and visual.has_art()
 
 func reset_at(at: Vector2) -> void:
 	position = at
@@ -167,6 +181,8 @@ func _poly(points: Array, color: Color) -> void:
 	draw_colored_polygon(PackedVector2Array(points), color)
 
 func _draw() -> void:
+	if uses_detailed_art():
+		return
 	var fur := Color("d99a53") if species == "tiger" else Color("8daab3")
 	var light_fur := Color("f1d6a7") if species == "tiger" else Color("dbe5df")
 	var dark_fur := Color("71482c") if species == "tiger" else Color("526c80")
