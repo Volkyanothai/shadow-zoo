@@ -5,10 +5,16 @@ extends Node3D
 signal exited
 
 const MODEL_PATH := "res://assets/fighters/tiger3d/tiger-study.glb"
-const POSES := ["idle_guard", "step_forward", "step_back", "jab"]
+const MOTION_PATH := "res://assets/fighters/tiger3d/tiger-study.motion.json"
+const POSES := ["idle_guard", "step_forward", "step_back", "jab", "cross", "hook", "guard_block", "dodge", "hit_react"]
+const DEMO_SEQUENCE := ["jab", "cross", "hook", "guard_block", "dodge", "hit_react", "idle_guard"]
+const FOOTWORK := ["step_forward", "step_back"]
+const UI_TOP := 111.0
+const UI_BOTTOM := 550.0
 const POSE_LABELS := {
-	"idle_guard": "STANCE", "step_forward": "STEP FORWARD",
-	"step_back": "STEP BACK", "jab": "PUNCH",
+	"idle_guard": "GUARD", "step_forward": "STEP FORWARD",
+	"step_back": "STEP BACK", "jab": "JAB", "cross": "CROSS",
+	"hook": "HOOK", "guard_block": "BLOCK", "dodge": "DODGE", "hit_react": "HIT REACT",
 }
 const ACCENT := Color("dfb779")
 const TEXT := Color("e5e9ec")
@@ -24,6 +30,8 @@ var preview_time := 0.0
 var animation_ids: Dictionary = {}
 var preview_paused := false
 var playback_speed := 1.0
+var demo_active := false
+var demo_index := 0
 
 var _ui: Control
 var _pose_buttons: Dictionary = {}
@@ -34,6 +42,8 @@ var _hint: Label
 var _progress: ProgressBar
 var _slow_button: Button
 var _pause_button: Button
+var _demo_button: Button
+var _motion_clips: Dictionary = {}
 var _font: Font
 var _orbit_angle := -0.70
 var _orbit_elevation := 0.19
@@ -75,7 +85,7 @@ func _build_studio() -> void:
 	floor_node.name = "StudioFloor"
 	floor_node.mesh = floor_mesh
 	floor_node.material_override = floor_material
-	floor_node.position.y = -0.005
+	floor_node.position.y = -0.03
 	add_child(floor_node)
 
 	var platform_material := StandardMaterial3D.new()
@@ -90,7 +100,8 @@ func _build_studio() -> void:
 	platform.name = "InspectionPlatform"
 	platform.mesh = platform_mesh
 	platform.material_override = platform_material
-	platform.position.y = -0.012
+	# Its top meets the sole at zero; keep the floor below to avoid depth flicker.
+	platform.position.y = -0.007
 	add_child(platform)
 
 	var marker_material := StandardMaterial3D.new()
@@ -103,7 +114,7 @@ func _build_studio() -> void:
 		marker_mesh.size = Vector3(0.16, 0.002, 0.009)
 		marker.mesh = marker_mesh
 		marker.material_override = marker_material
-		marker.position = Vector3(-0.75, -0.003, offset)
+		marker.position = Vector3(-0.75, 0.001, offset)
 		add_child(marker)
 
 	var key := DirectionalLight3D.new()
@@ -136,13 +147,17 @@ func _build_studio() -> void:
 	camera.name = "InspectionCamera"
 	camera.current = true
 	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
-	camera.size = 3.65
+	camera.size = 3.95
 	camera.near = 0.05
 	camera.far = 45.0
 	add_child(camera)
 
 
 func _load_character() -> void:
+	if FileAccess.file_exists(MOTION_PATH):
+		var motion: Variant = JSON.parse_string(FileAccess.get_file_as_string(MOTION_PATH))
+		if motion is Dictionary and motion.get("clips", {}) is Dictionary:
+			_motion_clips = motion.get("clips", {})
 	if not ResourceLoader.exists(MODEL_PATH):
 		_missing_reason = "The character could not be loaded. Please reopen the studio."
 		_show_asset_error()
@@ -192,11 +207,20 @@ func _show_asset_error() -> void:
 		button.disabled = true
 	_slow_button.disabled = true
 	_pause_button.disabled = true
+	_demo_button.disabled = true
 
 
 func set_pose(pose: String) -> void:
 	if pose not in POSES:
 		return
+	demo_active = false
+	# Stationary actions share a guard pose, so a short blend preserves breathing
+	# without interpolating a travelled root back across a planted support foot.
+	var blend := 0.08 if pose != selected_pose and pose not in FOOTWORK and selected_pose not in FOOTWORK and not preview_paused else 0.0
+	_play_pose(pose, blend)
+
+
+func _play_pose(pose: String, blend: float = 0.0) -> void:
 	selected_pose = pose
 	preview_time = 0.0
 	_finished = false
@@ -205,25 +229,30 @@ func set_pose(pose: String) -> void:
 		# Restarting a motion never carries its root travel into the next clip.
 		modelroot.position = Vector3.ZERO
 	if is_instance_valid(animation_player) and animation_ids.has(pose):
-		animation_player.stop()
+		if blend <= 0.0:
+			animation_player.stop()
 		var animation_id: StringName = animation_ids[pose]
 		var clip := animation_player.get_animation(animation_id)
 		_clip_duration = clip.length
 		# Only stance loops. A step completes once and remains at its destination,
 		# so the planted support foot does not slide when a loop resets position.
 		clip.loop_mode = Animation.LOOP_LINEAR if pose == "idle_guard" else Animation.LOOP_NONE
-		animation_player.play(animation_id)
+		animation_player.play(animation_id, blend)
 		animation_player.speed_scale = playback_speed
-		animation_player.seek(0.0, true)
+		if blend <= 0.0:
+			animation_player.seek(0.0, true)
 	_update_ui()
 
 
 func seek_pose(seconds: float, paused: bool = true) -> void:
 	if not is_instance_valid(animation_player) or not animation_ids.has(selected_pose):
 		return
+	demo_active = false
 	var target := clampf(seconds, 0.0, maxf(0.0, _clip_duration - 0.00001))
-	if animation_player.current_animation != animation_ids[selected_pose]:
-		animation_player.play(animation_ids[selected_pose])
+	# Exact inspection must not retain a previous clip's blend contribution.
+	animation_player.stop()
+	animation_player.play(animation_ids[selected_pose], 0.0)
+	animation_player.speed_scale = playback_speed
 	animation_player.seek(target, true)
 	preview_time = target
 	preview_paused = paused
@@ -231,6 +260,22 @@ func seek_pose(seconds: float, paused: bool = true) -> void:
 	if paused:
 		animation_player.pause()
 	_update_ui()
+
+
+func start_combo_demo() -> void:
+	if not is_instance_valid(animation_player) or _missing_reason != "":
+		return
+	demo_active = true
+	demo_index = 0
+	var blend := 0.08 if selected_pose not in FOOTWORK and not preview_paused else 0.0
+	_play_pose(DEMO_SEQUENCE[demo_index], blend)
+
+
+func _toggle_demo() -> void:
+	if demo_active:
+		set_pose("idle_guard")
+	else:
+		start_combo_demo()
 
 
 func set_camera_mode(mode: String) -> void:
@@ -249,7 +294,7 @@ func set_camera_mode(mode: String) -> void:
 func _update_camera() -> void:
 	if not is_instance_valid(camera):
 		return
-	var target := Vector3(0.0, 1.0, 0.0)
+	var target := Vector3(0.0, 0.90, 0.0)
 	if camera_mode == "side":
 		camera.position = Vector3(-5.6, 1.37, 0.0)
 	else:
@@ -261,7 +306,10 @@ func _update_camera() -> void:
 func _process(delta: float) -> void:
 	if is_instance_valid(animation_player) and not preview_paused and not _finished:
 		preview_time += delta * playback_speed
-		if selected_pose == "idle_guard" and _clip_duration > 0.0:
+		if demo_active and _clip_duration > 0.0 and preview_time >= _clip_duration:
+			demo_index = (demo_index + 1) % DEMO_SEQUENCE.size()
+			_play_pose(DEMO_SEQUENCE[demo_index], 0.08)
+		elif selected_pose == "idle_guard" and _clip_duration > 0.0:
 			preview_time = fposmod(preview_time, _clip_duration)
 		elif _clip_duration > 0.0 and preview_time >= _clip_duration:
 			preview_time = _clip_duration
@@ -271,6 +319,7 @@ func _process(delta: float) -> void:
 			animation_player.pause()
 			_update_ui()
 		_progress.value = preview_time / _clip_duration if _clip_duration > 0.0 else 0.0
+		_update_status()
 
 
 func leave_study() -> void:
@@ -316,8 +365,8 @@ func _build_ui() -> void:
 
 	_panel(Rect2(0, 0, 1280, 111), Color(0.042, 0.056, 0.080, 0.91))
 	_label("SHADOW ZOO", Rect2(48, 24, 290, 24), 20, ACCENT)
-	_label("KAI  /  FORM & MOTION", Rect2(48, 47, 580, 43), 34, TEXT)
-	_label("GREY TIGER STUDY", Rect2(850, 39, 225, 31), 19, MUTED, HORIZONTAL_ALIGNMENT_RIGHT)
+	_label("KAI  /  FIGHT MOTION", Rect2(48, 47, 580, 43), 34, TEXT)
+	_label("ANIMATION STUDY  0.4", Rect2(790, 39, 285, 31), 19, MUTED, HORIZONTAL_ALIGNMENT_RIGHT)
 	_button("EXIT", Rect2(1124, 32, 108, 48), leave_study)
 
 	_label("VIEW", Rect2(48, 131, 90, 27), 17, MUTED)
@@ -326,17 +375,21 @@ func _build_ui() -> void:
 	_label("PLAYBACK", Rect2(48, 238, 180, 27), 17, MUTED)
 	_slow_button = _button("SPEED  1×", Rect2(48, 270, 130, 45), _set_speed)
 	_pause_button = _button("PAUSE", Rect2(48, 325, 130, 45), _toggle_pause)
+	_demo_button = _button("FIGHT DEMO", Rect2(48, 380, 166, 45), _toggle_demo)
+	_label("Jab  >  cross  >  hook\nBlock, evade and recover", Rect2(48, 436, 245, 55), 16, MUTED)
 
-	_panel(Rect2(0, 578, 1280, 142), Color(0.042, 0.056, 0.080, 0.95))
-	_status = _label("STANCE", Rect2(48, 592, 310, 24), 19, TEXT)
-	_hint = _label("Tap a move to replay it.", Rect2(500, 592, 732, 24), 17, MUTED, HORIZONTAL_ALIGNMENT_RIGHT)
-	var button_x := 202.0
-	for pose: String in POSES:
-		_pose_buttons[pose] = _button(POSE_LABELS[pose], Rect2(button_x, 629, 207, 58), set_pose.bind(pose), 22)
-		button_x += 223.0
+	_panel(Rect2(0, UI_BOTTOM, 1280, 170), Color(0.042, 0.056, 0.080, 0.95))
+	_status = _label("GUARD  /  READY", Rect2(48, 562, 576, 27), 19, TEXT)
+	_hint = _label("Tap a move to replay it.", Rect2(650, 562, 582, 27), 16, MUTED, HORIZONTAL_ALIGNMENT_RIGHT)
+	for index in range(POSES.size()):
+		var pose: String = POSES[index]
+		var column := index % 5
+		var row := floori(float(index) / 5.0)
+		_pose_buttons[pose] = _button(POSE_LABELS[pose], Rect2(48 + column * 239, 602 + row * 55, 228, 45), set_pose.bind(pose), 20)
+	_label("TOUCH A MOVE TO REPLAY", Rect2(1004, 657, 228, 45), 14, MUTED, HORIZONTAL_ALIGNMENT_CENTER)
 	_progress = ProgressBar.new()
 	_progress.name = "MotionProgress"
-	_progress.position = Vector2(48, 697)
+	_progress.position = Vector2(48, 710)
 	_progress.size = Vector2(1184, 3)
 	_progress.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_progress.show_percentage = false
@@ -402,18 +455,51 @@ func _update_ui() -> void:
 	if not is_instance_valid(_status):
 		return
 	if _missing_reason.is_empty():
-		var suffix := "  /  REPLAY READY" if _finished else ""
-		if preview_paused and not _finished:
-			suffix = "  /  PAUSED"
-		_status.text = POSE_LABELS.get(selected_pose, "STANCE") + suffix
-		_hint.text = "Drag the character to turn the view.  •  Tap a move to replay." if camera_mode == "orbit" else "Tap a move to replay it.  •  ORBIT lets you inspect every side."
+		_update_status()
+		_hint.text = "Drag to turn the view.  •  Touch any move to replay." if camera_mode == "orbit" else "Touch a move to replay.  •  FIGHT DEMO links the actions."
 	for pose: String in _pose_buttons:
 		_mark_selected(_pose_buttons[pose], pose == selected_pose)
 	for view: String in _camera_buttons:
 		_mark_selected(_camera_buttons[view], view == camera_mode)
 	_slow_button.text = "SPEED  0.35×" if playback_speed < 0.5 else "SPEED  1×"
 	_pause_button.text = "REPLAY" if _finished else ("RESUME" if preview_paused else "PAUSE")
+	_demo_button.text = "STOP DEMO" if demo_active else "FIGHT DEMO"
+	_mark_selected(_demo_button, demo_active)
 	_progress.value = preview_time / _clip_duration if _clip_duration > 0.0 else 0.0
+
+
+func _update_status() -> void:
+	if not is_instance_valid(_status) or not _missing_reason.is_empty():
+		return
+	var phase := _motion_phase()
+	if _finished:
+		phase = "REPLAY READY"
+	elif preview_paused:
+		phase += "  /  PAUSED"
+	var prefix := "DEMO  /  " if demo_active else ""
+	var value := prefix + String(POSE_LABELS.get(selected_pose, "GUARD")) + "  /  " + phase
+	if _status.text != value:
+		_status.text = value
+		_status.add_theme_color_override("font_color", ACCENT if phase.begins_with("CONTACT") else TEXT)
+
+
+func _motion_phase() -> String:
+	var clip: Dictionary = _motion_clips.get(selected_pose, {})
+	var contact: float = float(clip.get("strike_contact", -1.0))
+	if contact >= 0.0 and absf(preview_time - contact) <= 0.045:
+		return "CONTACT"
+	var phases: Array = clip.get("phases", [])
+	for authored_phase: Variant in phases:
+		if authored_phase is Dictionary:
+			var start: float = float(authored_phase.get("start", 0.0))
+			var end: float = float(authored_phase.get("end", 0.0))
+			if preview_time >= start and preview_time <= end:
+				return String(authored_phase.get("name", "ready")).to_upper()
+	if selected_pose == "idle_guard":
+		return "READY"
+	if selected_pose in FOOTWORK:
+		return "FOOTWORK"
+	return "RECOVER" if preview_time > _clip_duration * 0.55 else "SET"
 
 
 func _mark_selected(button: Button, selected: bool) -> void:
@@ -439,7 +525,7 @@ func _input(event: InputEvent) -> void:
 					var action: Callable = _button_actions[button]
 					action.call()
 				get_viewport().set_input_as_handled()
-			elif camera_mode == "orbit" and event.position.y > 111 and event.position.y < 578:
+			elif camera_mode == "orbit" and event.position.y > UI_TOP and event.position.y < UI_BOTTOM:
 				_drag_pointer = event.index
 				get_viewport().set_input_as_handled()
 		elif event.index == _drag_pointer:
@@ -457,11 +543,17 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_2: set_pose("step_forward")
 			KEY_3: set_pose("step_back")
 			KEY_4: set_pose("jab")
+			KEY_5: set_pose("cross")
+			KEY_6: set_pose("hook")
+			KEY_7: set_pose("guard_block")
+			KEY_8: set_pose("dodge")
+			KEY_9: set_pose("hit_react")
+			KEY_D: _toggle_demo()
 			KEY_C: set_camera_mode("orbit" if camera_mode == "side" else "side")
 			_: return
 		get_viewport().set_input_as_handled()
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
-		if camera_mode == "orbit" and event.position.y > 111 and event.position.y < 578 and _button_at(event.position) == null:
+		if camera_mode == "orbit" and event.position.y > UI_TOP and event.position.y < UI_BOTTOM and _button_at(event.position) == null:
 			_mouse_drag = event.pressed
 			get_viewport().set_input_as_handled()
 		elif not event.pressed:

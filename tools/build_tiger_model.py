@@ -53,7 +53,7 @@ def main():
         export_frame_range=False,
     )
     # The GLB contains every isolated clip. Open the editable source on a
-    # clean idle preview instead of stacking all four NLA motions at once.
+    # clean idle preview instead of stacking every NLA motion at once.
     for track in result["armature"].animation_data.nla_tracks:
         track.mute = track.name != "idle_guard"
     bpy.context.scene.frame_set(0)

@@ -557,7 +557,7 @@ func _draw_hud(hud: Node2D) -> void:
 		_label(hud, "PREVIEW KAI", PAINTED_PREVIEW_BUTTON.get_center() + Vector2(0, 8), 22, GOLD, true)
 		_panel(hud, MODEL_PREVIEW_BUTTON, Color("cba569"), GOLD)
 		_label(hud, "3D MOTION STUDY", MODEL_PREVIEW_BUTTON.get_center() + Vector2(0, 8), 22, Color("10232c"), true)
-	_label(hud, "MODEL STUDY  /  0.3", Vector2(640, 704), 12, Color(0.63, 0.73, 0.73, 0.6), true)
+		_label(hud, "FIGHT MOTION  /  0.4", Vector2(640, 704), 12, Color(0.63, 0.73, 0.73, 0.6), true)
 
 func _draw_study_hud(hud: Node2D) -> void:
 	for i in range(10):

@@ -1,4 +1,18 @@
-# Shadow Zoo 0.3 — Android model study
+# Shadow Zoo 0.4 — Fighting animation study
+
+**[ดาวน์โหลด shadow-zoo-0.4.0.apk](shadow-zoo-0.4.0.apk?raw=true)** ปรับท่าการ์ดและเพิ่มแอนิเมชันเสือ 3D รวม 9 ท่า
+
+**[ดูภาพและคำอธิบาย](../docs/model-study.md)** · **[ดูหรือดาวน์โหลดคลิปท่าใหม่](tiger-fight-demo.mp4?raw=true)**
+
+เปิดเกมแล้วแตะ **3D MOTION STUDY** → **FIGHT DEMO** หรือเลือก **GUARD / STEP FORWARD / STEP BACK / JAB / CROSS / HOOK / BLOCK / DODGE / HIT REACT** ใช้ ORBIT แล้วลากตัวละครเพื่อหมุนตรวจรอบตัว ดูช้าด้วย SPEED และหยุดด้วย PAUSE ได้
+
+รุ่นนี้ใช้แพ็กเกจและกุญแจทดสอบเดิม พร้อมเลขเวอร์ชัน 4 สำหรับอัปเดตทับรุ่นก่อน สนามต่อสู้ยังใช้เสือภาพวาดของ 0.2 ระหว่างตรวจแอนิเมชันสามมิติ
+
+ขนาดประมาณ 32 MB ผ่านการทดสอบรวม 220 ข้อ ตรวจลายเซ็น v2/v3 และการจัดแนว APK 16 KB แล้ว ยังต้องลองความลื่นและการสัมผัสของรุ่นนี้บน MatePad จริง
+
+ดาวน์โหลด [GLB พร้อม 9 ท่า](../assets/fighters/tiger3d/tiger-study.glb?raw=true) หรือ [ต้นฉบับ Blender](tiger-study.blend?raw=true) ได้ ดู [เกมตัวอย่างที่ใช้ศึกษาท่า](../docs/fighting-animation-references.md)
+
+## เวอร์ชัน 0.3
 
 **[ดาวน์โหลด shadow-zoo-0.3.0.apk](shadow-zoo-0.3.0.apk?raw=true)** เพิ่มหน้าดูโมเดลเสือสามมิติสีเทา
 

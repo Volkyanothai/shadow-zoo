@@ -1,6 +1,6 @@
 # Shadow Zoo — The First Duel
 
-เกมต่อสู้สัตว์แบบแอป Godot เวอร์ชันต้นแบบ 0.3 สำหรับเล่นแนวนอนบนแท็บเล็ต
+เกมต่อสู้สัตว์แบบแอป Godot เวอร์ชันต้นแบบ 0.4 สำหรับเล่นแนวนอนบนแท็บเล็ต
 
 เล่นเป็น Kai (เสือ) ต่อสู้กับ Fen (หมาป่า AI) ในสนาม Moonlit Shrine มีโจมตีเบา คอมโบสามจังหวะ เตะหนัก ป้องกัน กระโดด และหลบ ใช้พลังในการออกท่า แข่งชนะสองยกจากสามยก ยกละ 60 วินาที เล่นออฟไลน์ได้
 
@@ -8,7 +8,7 @@
 
 ข้อจำกัดของภาพแยกชิ้นและแผนเปลี่ยนเป็นโมเดล 3D อยู่ใน [งานศึกษาโมเดลและการเคลื่อนไหว](docs/motion-and-model-research.md) พร้อมแหล่งข้อมูลและเกณฑ์ตรวจคุณภาพท่า
 
-เวอร์ชัน 0.3 เพิ่มหน้า **3D MOTION STUDY** สำหรับเสือโมเดลสามมิติสีเทา มีผิวต่อเนื่องพร้อมกระดูกและแอนิเมชันท่ายืน ก้าวหน้า ก้าวถอย และหมัดหนึ่งท่า หมุนกล้อง ดูช้า หยุดหรือเล่นซ้ำได้ ดู [ภาพ คลิป และต้นฉบับโมเดล](docs/model-study.md) สนามต่อสู้ยังใช้เสือภาพวาดของ 0.2 ระหว่างตรวจคุณภาพโมเดลใหม่
+เวอร์ชัน 0.4 ปรับหน้า **3D MOTION STUDY** ให้เสือมีท่าการ์ดสำหรับต่อสู้และแอนิเมชัน 9 ท่า: การ์ด ก้าวหน้า ก้าวถอย แย็บ หมัดตรงหลัง ฮุก บล็อก หลบ และโดนตี มี **FIGHT DEMO** เล่นท่าต่อเนื่อง หมุนกล้อง ดูช้า หยุดหรือเล่นซ้ำได้ ดู [ภาพ คลิป และต้นฉบับโมเดล](docs/model-study.md) และ [ตัวอย่างเกมที่ใช้ศึกษาท่า](docs/fighting-animation-references.md) สนามต่อสู้ยังใช้เสือภาพวาดของ 0.2 ระหว่างตรวจคุณภาพโมเดลใหม่
 
 ## Try the Android build
 
@@ -55,7 +55,7 @@ The suite runs **25 behavioral checks**, covering scene startup, movement, pause
 
 The visual suite runs **56 checks** covering the actual transparent atlas, all 16 regions, metadata loading, articulated anatomy, changing walk poses, distinct combo poses, other combat poses, preview entry/exit and Android Back restoration. Every suite exits nonzero on failure.
 
-The model suite runs **50 checks** covering the real imported 3D mesh, skin weight normalization/blending, anatomical bones, four clips, frame-zero keys, planted foot phases, fighting shuffle order, camera/touch controls, sound preservation, exit restoration and native Android Back event routing. The suites check mechanics and deformation data; visual review is still necessary to judge natural movement.
+The model suite runs **139 checks** covering the real imported 3D mesh, skin weight normalization/blending, anatomical bones, all nine clips and their exported lengths, frame-zero keys, compact guard and distinct attacks/defenses, positional/rotational guard recovery and idle seam, planted foot phases, fighting shuffle order, camera/touch controls, demo progression/pause/speed/interruption, sound preservation, exit restoration and native Android Back event routing. The suites check mechanics and deformation data; visual review is still necessary to judge natural movement.
 
 Native rendered frames can be captured using `tests/visual_capture.gd` on a graphical display; it saves gameplay and pose PNGs to `/workspace/artifacts`. Add `-- --demo` with Godot's `--write-movie` and `--fixed-fps 60` options to record a deterministic animation demonstration. Its recording rate is not a device performance measurement.
 
