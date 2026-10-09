@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ATTACKS, CombatEngine } from './combat';
-import { EMPTY_INPUT, FLOOR, type AttackId, type PlayerInput } from './types';
+import { FIGHTERS, FIGHTER_IDS } from './catalog';
+import { EMPTY_INPUT, FLOOR, type AttackId, type FighterId, type PlayerInput } from './types';
 
 const neutral = (): PlayerInput => ({ ...EMPTY_INPUT });
 const attack = (id: AttackId): PlayerInput => ({ ...EMPTY_INPUT, attack: id });
@@ -9,8 +10,8 @@ function advance(engine: CombatEngine, frames: number, input = neutral(), oppone
   for (let i = 0; i < frames; i++) engine.step(input, opponent);
 }
 
-function ready(): CombatEngine {
-  const engine = new CombatEngine('leo', false);
+function ready(fighterId: FighterId = 'leo', opponentId?: FighterId): CombatEngine {
+  const engine = new CombatEngine(fighterId, false, opponentId);
   engine.start();
   advance(engine, 180);
   engine.drainEvents();
@@ -202,5 +203,147 @@ describe('CombatEngine', () => {
     expect(a.state.wins[1]).toBe(2);
     expect(a.state).toEqual(b.state);
     expect(a.drainEvents().some(event => event.type === 'hit' && event.fighter === 1)).toBe(true);
+  });
+});
+
+describe('expanded animal roster', () => {
+  const newcomers: FighterId[] = ['raya', 'bao', 'nilo', 'ruk'];
+  const normalIds: AttackId[] = ['lp', 'mp', 'hp', 'lk', 'mk', 'hk'];
+
+  it('preserves the original matchup and chooses a different default rival for every new animal', () => {
+    expect(new CombatEngine('leo').state.fighters[1].id).toBe('koba');
+    expect(new CombatEngine('koba').state.fighters[1].id).toBe('leo');
+    for (const id of newcomers) {
+      const engine = new CombatEngine(id);
+      expect(engine.state.fighters[1].id).not.toBe(id);
+      expect(FIGHTER_IDS).toContain(engine.state.fighters[1].id);
+      const originalRival = engine.state.fighters[1].id;
+      engine.start();
+      expect(engine.state.fighters.map(f => f.id)).toEqual([id, originalRival]);
+    }
+  });
+
+  it('retains an explicitly selected CPU opponent across rounds and rematches', () => {
+    const engine = new CombatEngine('bao', true, 'ruk');
+    engine.start();
+    advance(engine, 180);
+    expect(engine.state.cpu).toBe(true);
+    expect(engine.state.fighters.map(f => f.id)).toEqual(['bao', 'ruk']);
+    engine.state.fighters[1].health = 0;
+    engine.step(neutral(), neutral());
+    advance(engine, 160);
+    expect(engine.state.round).toBe(2);
+    expect(engine.state.fighters.map(f => f.id)).toEqual(['bao', 'ruk']);
+    engine.start();
+    expect(engine.state.round).toBe(1);
+    expect(engine.state.fighters.map(f => f.id)).toEqual(['bao', 'ruk']);
+    engine.start('raya', 'nilo');
+    expect(engine.state.fighters.map(f => f.id)).toEqual(['raya', 'nilo']);
+    engine.start('raya');
+    expect(engine.state.fighters.map(f => f.id)).toEqual(['raya', 'nilo']);
+    engine.start('koba');
+    expect(engine.state.fighters.map(f => f.id)).toEqual(['koba', 'leo']);
+  });
+
+  it.each(FIGHTER_IDS)('%s walks and jumps at its own movement speed', id => {
+    const engine = ready(id);
+    const f = engine.state.fighters[0];
+    const initialX = f.x;
+    advance(engine, 10, { ...EMPTY_INPUT, right: true });
+    expect(f.x - initialX).toBeCloseTo(FIGHTERS[id].speed * 10);
+    engine.step({ ...EMPTY_INPUT, up: true }, neutral());
+    expect(f.grounded).toBe(false);
+    expect(f.vy).toBeCloseTo(FIGHTERS[id].jump + 0.3);
+    advance(engine, 60);
+    expect(f.grounded).toBe(true);
+    expect(f.y).toBe(FLOOR);
+  });
+
+  it.each(newcomers)('%s has six working normals with startup, one hit, and recovery', id => {
+    for (const normalId of normalIds) {
+      const engine = ready(id);
+      close(engine);
+      const spec = ATTACKS[id][normalId];
+      engine.step(attack(normalId), neutral());
+      advance(engine, spec.startup - 2);
+      expect(engine.state.fighters[1].health).toBe(1000);
+      advance(engine, 1);
+      expect(engine.state.fighters[1].health).toBe(1000 - spec.damage);
+      advance(engine, spec.active + spec.recovery + 20);
+      expect(engine.state.fighters[0].attack).toBeNull();
+      expect(engine.state.fighters[1].health).toBe(1000 - spec.damage);
+      expect(engine.drainEvents().filter(event => event.type === 'hit')).toHaveLength(1);
+    }
+  });
+
+  it.each(newcomers)('%s closes a gap with its advancing special and hits once', id => {
+    const engine = ready(id);
+    close(engine, 80);
+    const initialX = engine.state.fighters[0].x;
+    engine.step(attack('special1'), neutral());
+    advance(engine, 80);
+    expect(engine.state.fighters[0].x).toBeGreaterThan(initialX);
+    expect(engine.state.fighters[1].health).toBe(1000 - ATTACKS[id].special1.damage);
+    expect(engine.drainEvents().filter(event => event.type === 'hit' && event.attack === 'special1')).toHaveLength(1);
+  });
+
+  it.each(newcomers)('%s launches a traveling wave that damages its opponent once', id => {
+    const engine = ready(id);
+    engine.state.fighters[0].x = 80;
+    engine.state.fighters[1].x = 280;
+    engine.step(attack('special2'), neutral());
+    advance(engine, ATTACKS[id].special2.startup);
+    expect(engine.state.projectiles).toHaveLength(1);
+    expect(engine.state.projectiles[0].kind).toBe(ATTACKS[id].special2.projectile);
+    const launchedX = engine.state.projectiles[0].x;
+    advance(engine, 5);
+    expect(engine.state.projectiles[0].x).toBeGreaterThan(launchedX);
+    expect(engine.state.fighters[1].health).toBe(1000);
+    advance(engine, 110);
+    expect(engine.state.fighters[1].health).toBe(1000 - ATTACKS[id].special2.damage);
+    expect(engine.state.projectiles).toHaveLength(0);
+    expect(engine.drainEvents().filter(event => event.type === 'hit' && event.attack === 'special2')).toHaveLength(1);
+  });
+
+  it.each(newcomers)('%s spends a full meter on a multi-hit super', id => {
+    const engine = ready(id);
+    close(engine);
+    engine.step(attack('super'), neutral());
+    expect(engine.state.fighters[0].attack).toBeNull();
+    engine.state.fighters[0].meter = 100;
+    engine.step(attack('super'), neutral());
+    expect(engine.state.fighters[0].meter).toBe(0);
+    advance(engine, 110);
+    const hits = engine.drainEvents().filter(event => event.type === 'hit' && event.attack === 'super');
+    expect(hits.length).toBeGreaterThanOrEqual(3);
+    expect(engine.state.fighters[0].meter).toBe(0);
+    expect(engine.state.fighters[1].health).toBeLessThan(800);
+  });
+
+  it.each(newcomers)('%s can fight as the CPU and finish a match', id => {
+    const engine = new CombatEngine('leo', true, id);
+    engine.start();
+    let frames = 0;
+    while (engine.state.phase !== 'matchOver' && frames++ < 14000) engine.step(neutral());
+    expect(engine.state.phase).toBe('matchOver');
+    expect(engine.state.fighters[1].id).toBe(id);
+    expect(engine.state.wins[1]).toBe(2);
+    expect(engine.drainEvents().some(event => event.type === 'hit' && event.fighter === 1)).toBe(true);
+  });
+
+  it.each(['nilo', 'ruk'] as FighterId[])('%s ground wave requires a crouching block', id => {
+    const cast = (down: boolean): CombatEngine => {
+      const engine = ready(id, 'leo');
+      close(engine, 60);
+      const block = { ...EMPTY_INPUT, right: true, down };
+      engine.step(attack('special2'), block);
+      advance(engine, 140, neutral(), block);
+      return engine;
+    };
+    const standing = cast(false);
+    const crouching = cast(true);
+    expect(standing.state.fighters[1].health).toBe(1000 - ATTACKS[id].special2.damage);
+    expect(crouching.state.fighters[1].health).toBeGreaterThan(standing.state.fighters[1].health);
+    expect(crouching.drainEvents().some(event => event.type === 'block' && event.attack === 'special2')).toBe(true);
   });
 });

@@ -1,4 +1,6 @@
-export type FighterId = 'leo' | 'koba';
+export type FighterId = 'leo' | 'koba' | 'raya' | 'bao' | 'nilo' | 'ruk';
+export type StageId = 'temple' | 'bamboo' | 'savanna' | 'mangrove';
+export type Locale = 'th' | 'en';
 export type AttackId = 'lp' | 'mp' | 'hp' | 'lk' | 'mk' | 'hk' | 'special1' | 'special2' | 'super';
 export type FighterAction = 'idle' | 'walk' | 'crouch' | 'jump' | 'attack' | 'hurt' | 'block' | 'ko' | 'win';
 

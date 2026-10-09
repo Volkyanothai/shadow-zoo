@@ -3,11 +3,15 @@ import { CombatEngine } from './combat';
 import { ArcadeAudio } from './audio';
 import { ArcadeInput } from './input';
 import { drawArena, drawFighter, drawEffects, setArenaImage } from './art';
-import { WIDTH, HEIGHT, type AttackId, type FighterId, type GameState } from './types';
+import { FIGHTERS, FIGHTER_IDS, STAGES } from './catalog';
+import { getLocale } from './i18n';
+import { WIDTH, HEIGHT, type AttackId, type FighterId, type GameState, type Locale, type StageId } from './types';
 
-export interface GameSnapshot { state: GameState; paused: boolean; muted: boolean }
+export interface GameSnapshot { state: GameState; paused: boolean; muted: boolean; locale: Locale; stage: StageId }
 export interface GameController {
-  start(fighterId: FighterId): void;
+  start(fighterId: FighterId, stageId?: StageId): void;
+  setLocale(locale: Locale): void;
+  setStage(stageId: StageId): void;
   pause(): void;
   restart(): void;
   returnToMenu(): void;
@@ -21,11 +25,15 @@ export interface GameController {
   destroy(): void;
 }
 
-const NAMES = { leo: 'LEO', koba: 'KOBA' };
 const SMALL_FONT = '"Press Start 2P", monospace';
+const HUD = {
+  th: { player: 'ผู้เล่น', cpu: 'คอม', super: 'ไม้ตาย', ready: 'ไม้ตายพร้อม', hit: 'ฮิต', combo: 'คอมโบ', round: 'ยกที่', fight: 'เริ่มสู้!', ko: 'น็อกเอาต์', time: 'หมดเวลา', draw: 'เสมอ', wins: 'ชนะ', meter: 'ต้องใช้เกจไม้ตายเต็ม', arena: 'สนามต่อสู้ Shadow Zoo ใช้ WASD เคลื่อนที่ U I O ต่อย J K L เตะ Q E ท่าพิเศษ R ท่าไม้ตาย P หยุดเกม' },
+  en: { player: '1P', cpu: 'CPU', super: 'SUPER', ready: 'SUPER READY', hit: 'HIT', combo: 'COMBO', round: 'ROUND', fight: 'FIGHT!', ko: 'K.O.', time: 'TIME UP', draw: 'DRAW', wins: 'WINS', meter: 'SUPER NEEDS FULL METER', arena: 'Shadow Zoo fighting arena. WASD to move, U I O to punch, J K L to kick. Q E specials, R super, P pause.' },
+};
 
 function pixelText(ctx: CanvasRenderingContext2D, value: string, x: number, y: number, size = 7, color = '#fff3d6', align: CanvasTextAlign = 'left') {
-  ctx.font = `${size}px ${SMALL_FONT}`;
+  const thai = /[\u0e00-\u0e7f]/u.test(value);
+  ctx.font = thai ? `600 ${size + (size <= 7 ? 3 : 2)}px "Noto Sans Thai", sans-serif` : `${size}px ${SMALL_FONT}`;
   ctx.textAlign = align;
   ctx.textBaseline = 'top';
   ctx.fillStyle = '#101521';
@@ -34,16 +42,17 @@ function pixelText(ctx: CanvasRenderingContext2D, value: string, x: number, y: n
   ctx.fillText(value, Math.round(x), Math.round(y));
 }
 
-function drawHud(ctx: CanvasRenderingContext2D, state: GameState, trails: number[]) {
+function drawHud(ctx: CanvasRenderingContext2D, state: GameState, trails: number[], locale: Locale) {
+  const labels = HUD[locale];
   const gradient = ctx.createLinearGradient(0, 0, 0, 48);
   gradient.addColorStop(0, 'rgba(9,15,23,.88)');
   gradient.addColorStop(1, 'rgba(9,15,23,0)');
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, WIDTH, 48);
-  pixelText(ctx, NAMES[state.fighters[0].id], 14, 8, 7, '#ffdf94');
-  pixelText(ctx, NAMES[state.fighters[1].id], 370, 8, 7, '#8ee7d2', 'right');
-  pixelText(ctx, '1P', 66, 9, 5, '#e4d8c3');
-  pixelText(ctx, 'CPU', 313, 9, 5, '#e4d8c3', 'right');
+  pixelText(ctx, FIGHTERS[state.fighters[0].id].name[locale], 14, locale === 'th' ? 5 : 8, 7, '#ffdf94');
+  pixelText(ctx, FIGHTERS[state.fighters[1].id].name[locale], 370, locale === 'th' ? 5 : 8, 7, '#8ee7d2', 'right');
+  pixelText(ctx, labels.player, 66, locale === 'th' ? 6 : 9, 5, '#e4d8c3');
+  pixelText(ctx, labels.cpu, 313, locale === 'th' ? 6 : 9, 5, '#e4d8c3', 'right');
   const barWidth = 146;
   state.fighters.forEach((fighter, i) => {
     const x = i === 0 ? 14 : 224;
@@ -71,16 +80,16 @@ function drawHud(ctx: CanvasRenderingContext2D, state: GameState, trails: number
     ctx.fillStyle = fighter.meter >= 100 ? (state.frame % 20 < 10 ? '#ffe8aa' : '#ffbd55') : i === 0 ? '#f0af45' : '#5eb5b7';
     ctx.fillRect(meterX + 1, 211, Math.floor(108 * fighter.meter / 100), 5);
     for (let m = 1; m < 4; m++) { ctx.fillStyle = '#0b1924'; ctx.fillRect(meterX + m * 27, 211, 1, 5); }
-    pixelText(ctx, fighter.meter >= 100 ? 'SUPER READY' : 'SUPER', i === 0 ? 14 : 370, 201, 5, fighter.meter >= 100 ? '#ffdf8f' : '#ddd5b4', i === 0 ? 'left' : 'right');
+    pixelText(ctx, fighter.meter >= 100 ? labels.ready : labels.super, i === 0 ? 14 : 370, locale === 'th' ? 198 : 201, 5, fighter.meter >= 100 ? '#ffdf8f' : '#ddd5b4', i === 0 ? 'left' : 'right');
     if (fighter.combo >= 2 && fighter.comboTimer > 0) {
-      pixelText(ctx, `${fighter.combo} HIT`, i === 0 ? 30 : 354, 51, 10, '#fff0bc', i === 0 ? 'left' : 'right');
-      pixelText(ctx, 'COMBO', i === 0 ? 31 : 353, 64, 5, '#ffad67', i === 0 ? 'left' : 'right');
+      pixelText(ctx, `${fighter.combo} ${labels.hit}`, i === 0 ? 30 : 354, 51, 10, '#fff0bc', i === 0 ? 'left' : 'right');
+      pixelText(ctx, labels.combo, i === 0 ? 31 : 353, 65, 5, '#ffad67', i === 0 ? 'left' : 'right');
     }
   });
   ctx.fillStyle = '#111e27'; ctx.fillRect(170, 8, 44, 29);
   ctx.fillStyle = '#58645c'; ctx.fillRect(172, 9, 40, 1);
   pixelText(ctx, String(Math.ceil(state.timer)).padStart(2, '0'), WIDTH / 2, 13, 14, state.timer < 10 ? '#ff8565' : '#fff4ca', 'center');
-  pixelText(ctx, `ROUND ${String(state.round).padStart(2, '0')}`, WIDTH / 2, 35, 5, '#ece0c0', 'center');
+  pixelText(ctx, `${labels.round} ${String(state.round).padStart(2, '0')}`, WIDTH / 2, locale === 'th' ? 33 : 35, 5, '#ece0c0', 'center');
 }
 
 export function createGame(parent: HTMLElement, onUpdate: (snapshot: GameSnapshot) => void): GameController {
@@ -89,6 +98,11 @@ export function createGame(parent: HTMLElement, onUpdate: (snapshot: GameSnapsho
   let paused = false;
   let muted = false;
   let selected: FighterId = 'leo';
+  let selectedOpponent: FighterId = 'koba';
+  let locale: Locale = getLocale();
+  let stage: StageId = 'temple';
+  const stageImages = new Map<StageId, HTMLImageElement>();
+  const failedImages = new Set<StageId>();
   let accumulator = 0;
   let flash = 0;
   let shake = 0;
@@ -103,7 +117,7 @@ export function createGame(parent: HTMLElement, onUpdate: (snapshot: GameSnapsho
 
   const syncSound = () => sound.setMuted(muted || paused || menuActive || !inputEnabled);
 
-  const notify = () => { if (!dead) onUpdate({ state: engine.state, paused, muted }); };
+  const notify = () => { if (!dead) onUpdate({ state: engine.state, paused, muted, locale, stage }); };
   const pause = () => {
     if (!['fight', 'countdown', 'roundOver'].includes(engine.state.phase)) return;
     paused = !paused;
@@ -119,9 +133,22 @@ export function createGame(parent: HTMLElement, onUpdate: (snapshot: GameSnapsho
   });
   input.setEnabled(false);
   syncSound();
-  const background = new Image();
-  background.onload = () => setArenaImage(background);
-  background.src = `${import.meta.env.BASE_URL}assets/arena.png`;
+  const loadStage = (id: StageId) => {
+    stage = id;
+    const cached = stageImages.get(id);
+    const fallback = stageImages.get('temple');
+    setArenaImage(cached?.complete && cached.naturalWidth > 0 ? cached : fallback?.naturalWidth ? fallback : null);
+    if (cached || failedImages.has(id)) return;
+    const background = new Image();
+    stageImages.set(id, background);
+    background.onload = () => { if (!dead && stage === id) { setArenaImage(background); notify(); } };
+    background.onerror = () => {
+      failedImages.add(id);
+      if (!dead && stage === id) setArenaImage(stageImages.get('temple')?.naturalWidth ? stageImages.get('temple')! : null);
+    };
+    background.src = `${import.meta.env.BASE_URL}assets/${STAGES[id].asset}`;
+  };
+  loadStage(stage);
 
   class ArenaScene extends Phaser.Scene {
     private screen!: Phaser.Textures.CanvasTexture;
@@ -133,7 +160,7 @@ export function createGame(parent: HTMLElement, onUpdate: (snapshot: GameSnapsho
       this.add.image(0, 0, 'stage').setOrigin(0);
       this.screen.context.imageSmoothingEnabled = false;
       const canvas = this.game.canvas;
-      canvas.setAttribute('aria-label', 'Shadow Zoo fighting arena. Use WASD to move, U I O to punch, J K L to kick.');
+      canvas.setAttribute('aria-label', HUD[locale].arena);
       canvas.setAttribute('role', 'img');
       canvas.tabIndex = 0;
       canvas.addEventListener('pointerdown', () => { sound.unlock(); canvas.focus({ preventScroll: true }); });
@@ -175,25 +202,26 @@ export function createGame(parent: HTMLElement, onUpdate: (snapshot: GameSnapsho
       ctx.clearRect(0, 0, WIDTH, HEIGHT);
       ctx.save();
       if (shake > 0 && !paused) ctx.translate(Math.round(Math.sin(visualFrame * 2.7) * shake), Math.round(Math.cos(visualFrame * 3.4) * shake / 2));
-      drawArena(ctx, visualFrame);
+      drawArena(ctx, visualFrame, stage);
       for (const fighter of engine.state.fighters) drawFighter(ctx, fighter, paused ? engine.state.frame : visualFrame);
       drawEffects(ctx, engine.state, visualFrame);
       if (flash > 0) { ctx.fillStyle = `rgba(255,234,176,${flash / 60})`; ctx.fillRect(0, 0, WIDTH, HEIGHT); }
       ctx.restore();
-      drawHud(ctx, engine.state, hudTrails);
+      drawHud(ctx, engine.state, hudTrails, locale);
       const state = engine.state;
+      const labels = HUD[locale];
       if (state.phase === 'countdown') {
-        pixelText(ctx, `ROUND ${state.round}`, WIDTH / 2, 76, 13, '#ffdd84', 'center');
+        pixelText(ctx, `${labels.round} ${state.round}`, WIDTH / 2, 76, 13, '#ffdd84', 'center');
         const number = Math.ceil(state.phaseTimer / 60);
         pixelText(ctx, String(Math.max(1, number)), WIDTH / 2, 102, 27, '#fff5d6', 'center');
       }
-      if (fightText > 0 && state.phase === 'fight') pixelText(ctx, 'FIGHT!', WIDTH / 2, 85, 22, '#ffe297', 'center');
+      if (fightText > 0 && state.phase === 'fight') pixelText(ctx, labels.fight, WIDTH / 2, 85, 22, '#ffe297', 'center');
       if (state.phase === 'roundOver') {
         const knockedOut = state.fighters.some((fighter) => fighter.health <= 0);
-        pixelText(ctx, knockedOut ? 'K.O.' : 'TIME UP', WIDTH / 2, 76, 24, '#ffde8e', 'center');
-        pixelText(ctx, state.winner === null ? 'DRAW' : `${NAMES[state.fighters[state.winner].id]} WINS`, WIDTH / 2, 109, 9, '#fff5df', 'center');
+        pixelText(ctx, knockedOut ? labels.ko : labels.time, WIDTH / 2, 76, 24, '#ffde8e', 'center');
+        pixelText(ctx, state.winner === null ? labels.draw : `${FIGHTERS[state.fighters[state.winner].id].name[locale]} ${labels.wins}`, WIDTH / 2, 109, 9, '#fff5df', 'center');
       }
-      if (meterHint > 0 && !paused) pixelText(ctx, 'SUPER NEEDS FULL METER', WIDTH / 2, 183, 6, '#ffe69e', 'center');
+      if (meterHint > 0 && !paused) pixelText(ctx, labels.meter, WIDTH / 2, 181, 6, '#ffe69e', 'center');
       this.screen.refresh();
       if (time - lastNotification > 120) { lastNotification = time; notify(); }
     }
@@ -221,17 +249,25 @@ export function createGame(parent: HTMLElement, onUpdate: (snapshot: GameSnapsho
   };
   document.addEventListener('visibilitychange', onVisibility);
 
-  const controller: GameController = {
-    start(fighterId) {
+  const beginMatch = (fighterId: FighterId, opponentId: FighterId) => {
       sound.unlock(); selected = fighterId; paused = false; menuActive = false; inputEnabled = true;
+      selectedOpponent = opponentId;
       input.setEnabled(true); accumulator = 0;
-      syncSound(); engine.start(fighterId); hudTrails = [1000, 1000]; flash = 0; shake = 0; fightText = 0; meterHint = 0; notify();
+      syncSound(); engine.start(fighterId, opponentId); hudTrails = [1000, 1000]; flash = 0; shake = 0; fightText = 0; meterHint = 0; notify();
+  };
+  const controller: GameController = {
+    start(fighterId, stageId = stage) {
+      loadStage(stageId);
+      const rivals = FIGHTER_IDS.filter(id => id !== fighterId);
+      beginMatch(fighterId, rivals[Math.floor(Math.random() * rivals.length)]);
     },
+    setStage(stageId) { loadStage(stageId); notify(); },
+    setLocale(value) { locale = value; phaser.canvas?.setAttribute('aria-label', HUD[locale].arena); notify(); },
     pause,
-    restart() { controller.start(selected); },
+    restart() { beginMatch(selected, selectedOpponent); },
     returnToMenu() {
       menuActive = true; inputEnabled = false; paused = false; accumulator = 0;
-      input.setEnabled(false); engine = new CombatEngine(selected, true);
+      input.setEnabled(false); engine = new CombatEngine(selected, true, selectedOpponent);
       hudTrails = [1000, 1000]; flash = 0; shake = 0; fightText = 0; meterHint = 0;
       syncSound(); notify();
     },

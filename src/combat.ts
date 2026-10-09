@@ -3,8 +3,11 @@ import {
   type AttackId, type CombatEvent, type Fighter, type FighterId,
   type GameState, type PlayerInput, type Projectile,
 } from './types';
+import { FIGHTERS, FIGHTER_IDS } from './catalog';
 
-export const FIGHTER_NAMES: Record<FighterId, string> = { leo: 'LEO', koba: 'KOBA' };
+export const FIGHTER_NAMES = Object.fromEntries(
+  FIGHTER_IDS.map(id => [id, FIGHTERS[id].name.en]),
+) as Record<FighterId, string>;
 
 export interface AttackSpec {
   startup: number;
@@ -28,6 +31,13 @@ const normals: Record<Exclude<AttackId, 'special1' | 'special2' | 'super'>, Atta
   hk: { startup: 12, active: 5, recovery: 22, damage: 100, reach: 62, stun: 28, push: 8, rank: 2 },
 };
 
+function tunedNormals(damage: number, startup: number, reach: number, recovery: number): typeof normals {
+  return Object.fromEntries(Object.entries(normals).map(([id, spec]) => [id, {
+    ...spec, damage: Math.round(spec.damage * damage), startup: spec.startup + startup,
+    reach: spec.reach + reach, recovery: spec.recovery + recovery,
+  }])) as typeof normals;
+}
+
 export const ATTACKS: Record<FighterId, Record<AttackId, AttackSpec>> = {
   leo: {
     ...normals,
@@ -36,15 +46,42 @@ export const ATTACKS: Record<FighterId, Record<AttackId, AttackSpec>> = {
     super: { startup: 9, active: 26, recovery: 25, damage: 85, reach: 84, stun: 24, push: 3, rank: 4, advance: 2.4 },
   },
   koba: {
-    ...Object.fromEntries(Object.entries(normals).map(([id, spec]) => [id, {
-      ...spec, damage: Math.round(spec.damage * 1.15), startup: spec.startup + 2,
-      reach: spec.reach + 5, recovery: spec.recovery + 2,
-    }])) as typeof normals,
+    ...tunedNormals(1.15, 2, 5, 2),
     special1: { startup: 12, active: 7, recovery: 22, damage: 165, reach: 58, stun: 34, push: 14, rank: 3, advance: 2.1 },
     special2: { startup: 19, active: 3, recovery: 26, damage: 110, reach: 0, stun: 25, push: 8, rank: 3, projectile: 'ground' },
     super: { startup: 15, active: 26, recovery: 27, damage: 110, reach: 76, stun: 26, push: 3, rank: 4, advance: 1.8 },
   },
+  raya: {
+    ...tunedNormals(0.92, -1, -2, -2),
+    special1: { startup: 6, active: 10, recovery: 17, damage: 118, reach: 46, stun: 28, push: 9, rank: 3, advance: 3.7 },
+    special2: { startup: 12, active: 3, recovery: 20, damage: 86, reach: 0, stun: 23, push: 6, rank: 3, projectile: 'roar' },
+    super: { startup: 7, active: 26, recovery: 23, damage: 79, reach: 74, stun: 24, push: 3, rank: 4, advance: 3.1 },
+  },
+  bao: {
+    ...tunedNormals(1.03, 1, 7, 1),
+    special1: { startup: 10, active: 7, recovery: 20, damage: 141, reach: 64, stun: 32, push: 10, rank: 3, advance: 2.4 },
+    special2: { startup: 16, active: 3, recovery: 23, damage: 98, reach: 0, stun: 25, push: 6, rank: 3, projectile: 'roar' },
+    super: { startup: 11, active: 26, recovery: 25, damage: 94, reach: 90, stun: 25, push: 3, rank: 4, advance: 2 },
+  },
+  nilo: {
+    ...tunedNormals(1.05, 2, 14, 2),
+    special1: { startup: 11, active: 9, recovery: 23, damage: 149, reach: 80, stun: 33, push: 12, rank: 3, advance: 2.3 },
+    special2: { startup: 18, active: 3, recovery: 25, damage: 116, reach: 0, stun: 27, push: 8, rank: 3, projectile: 'ground' },
+    super: { startup: 13, active: 26, recovery: 27, damage: 102, reach: 100, stun: 26, push: 3, rank: 4, advance: 2 },
+  },
+  ruk: {
+    ...tunedNormals(1.3, 4, 6, 4),
+    special1: { startup: 15, active: 10, recovery: 27, damage: 188, reach: 62, stun: 36, push: 16, rank: 3, advance: 2.7 },
+    special2: { startup: 23, active: 3, recovery: 28, damage: 134, reach: 0, stun: 29, push: 9, rank: 3, projectile: 'ground' },
+    super: { startup: 18, active: 26, recovery: 31, damage: 124, reach: 84, stun: 28, push: 3, rank: 4, advance: 1.9 },
+  },
 };
+
+function defaultOpponent(playerId: FighterId): FighterId {
+  if (playerId === 'leo') return 'koba';
+  if (playerId === 'koba') return 'leo';
+  return FIGHTER_IDS[(FIGHTER_IDS.indexOf(playerId) + 1) % FIGHTER_IDS.length];
+}
 
 interface FighterRuntime {
   buffer: AttackId | null;
@@ -80,19 +117,22 @@ export class CombatEngine {
   private aiWait = 0;
   private aiInput: PlayerInput = { ...EMPTY_INPUT };
 
-  constructor(playerId: FighterId = 'leo', cpu = true) {
+  constructor(playerId: FighterId = 'leo', cpu = true, opponentId: FighterId = defaultOpponent(playerId)) {
     this.state = {
-      fighters: [fighter(playerId, 0), fighter(playerId === 'leo' ? 'koba' : 'leo', 1)],
+      fighters: [fighter(playerId, 0), fighter(opponentId, 1)],
       phase: 'select', timer: 60, round: 1, wins: [0, 0], phaseTimer: 0,
       frame: 0, hitstop: 0, projectiles: [], effects: [], winner: null,
       announcement: 'CHOOSE YOUR FIGHTER', cpu,
     };
   }
 
-  start(playerId: FighterId = this.state.fighters[0].id): void {
+  start(playerId: FighterId = this.state.fighters[0].id, opponentId?: FighterId): void {
     const cpu = this.state.cpu;
+    // A rematch keeps its selected rival; a different player gets a new default matchup.
+    const rival = opponentId ?? (playerId === this.state.fighters[0].id
+      ? this.state.fighters[1].id : defaultOpponent(playerId));
     this.state = {
-      fighters: [fighter(playerId, 0), fighter(playerId === 'leo' ? 'koba' : 'leo', 1)],
+      fighters: [fighter(playerId, 0), fighter(rival, 1)],
       phase: 'countdown', timer: 60, round: 1, wins: [0, 0], phaseTimer: 180,
       frame: 0, hitstop: 0, projectiles: [], effects: [], winner: null,
       announcement: '3', cpu,
@@ -205,11 +245,11 @@ export class CombatEngine {
       } else {
         const direction = Number(input.right) - Number(input.left);
         if (f.grounded) {
-          f.vx = input.down ? 0 : direction * (f.id === 'leo' ? 1.65 : 1.2);
+          f.vx = input.down ? 0 : direction * FIGHTERS[f.id].speed;
           f.action = input.down ? 'crouch' : direction ? 'walk' : 'idle';
           if (rt.jumpPressed && !input.down) {
             f.grounded = false;
-            f.vy = f.id === 'leo' ? -6.3 : -5.8;
+            f.vy = FIGHTERS[f.id].jump;
             f.vx = direction * 1.7;
             f.action = 'jump';
             this.effect(f.x, FLOOR, 'dust', f.facing, 12);
