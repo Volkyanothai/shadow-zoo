@@ -111,7 +111,7 @@ export function createGame(parent: HTMLElement, onUpdate: (snapshot: GameSnapsho
   });
   const background = new Image();
   background.onload = () => setArenaImage(background);
-  background.src = '/assets/arena.png';
+  background.src = `${import.meta.env.BASE_URL}assets/arena.png`;
 
   class ArenaScene extends Phaser.Scene {
     private screen!: Phaser.Textures.CanvasTexture;
